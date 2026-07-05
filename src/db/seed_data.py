@@ -163,6 +163,77 @@ def insert_test_patient_risk_history(conn):
 
     print("Inserted risk history for patient: P_TEST_001")
 
+def insert_care_gap(conn, patient_id, measure_name, status, due_date, priority):
+    """
+    Insert one care gap for a patient.
+    """
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        INSERT INTO care_gaps (
+            patient_id,
+            measure_name,
+            status,
+            due_date,
+            priority
+        )
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (
+            patient_id,
+            measure_name,
+            status,
+            due_date,
+            priority
+        )
+    )
+
+
+def insert_test_patient_care_gaps(conn):
+    """
+    Insert multiple care gaps for the test patient.
+    """
+    patient_id = "P_TEST_001"
+
+    care_gaps = [
+        {
+            "measure_name": "Medication reconciliation",
+            "status": "open",
+            "days_until_due": 7,
+            "priority": 3
+        },
+        {
+            "measure_name": "A1C screening",
+            "status": "open",
+            "days_until_due": 14,
+            "priority": 2
+        },
+        {
+            "measure_name": "Annual wellness visit",
+            "status": "closed",
+            "days_until_due": -10,
+            "priority": 1
+        }
+    ]
+
+    for gap in care_gaps:
+        due_date = datetime.now() + timedelta(days=gap["days_until_due"])
+        due_date_string = due_date.strftime("%Y-%m-%d")
+
+        insert_care_gap(
+            conn=conn,
+            patient_id=patient_id,
+            measure_name=gap["measure_name"],
+            status=gap["status"],
+            due_date=due_date_string,
+            priority=gap["priority"]
+        )
+
+    conn.commit()
+
+    print("Inserted care gaps for patient: P_TEST_001")
+
 
 def main():
     conn = connect_db()
@@ -174,6 +245,7 @@ def main():
     clear_existing_data(conn)
     insert_test_patient(conn)
     insert_test_patient_risk_history(conn)
+    insert_test_patient_care_gaps(conn)
 
     conn.close()
 
