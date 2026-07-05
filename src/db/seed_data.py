@@ -1,6 +1,6 @@
 import sqlite3
 from pathlib import Path
-
+from datetime import datetime, timedelta
 
 DB_PATH = Path("data/a05_lpr.sqlite")
 
@@ -8,8 +8,6 @@ DB_PATH = Path("data/a05_lpr.sqlite")
 def connect_db():
     """
     Connect to the SQLite database.
-
-    If the database file does not exist yet, SQLite will create it.
     """
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
@@ -43,6 +41,129 @@ def show_existing_tables(conn):
         print(f"- {table[0]}")
 
 
+def clear_existing_data(conn):
+    """
+    Clear all existing data from the database.
+
+    Child tables are cleared before parent tables to avoid
+    foreign key relationship problems.
+    """
+    cursor = conn.cursor()
+
+    tables = [
+        "care_manager_notes",
+        "medication_events",
+        "encounters",
+        "care_gaps",
+        "risk_scores",
+        "patients"
+    ]
+
+    for table in tables:
+        cursor.execute(f"DELETE FROM {table}")
+
+    conn.commit()
+
+    print("Cleared existing data.")
+
+
+def insert_test_patient(conn):
+    """
+    Insert one test patient into the patients table.
+    """
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        INSERT INTO patients (
+            patient_id,
+            first_name,
+            last_name,
+            date_of_birth,
+            pcp_name,
+            enrollment_date,
+            active
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "P_TEST_001",
+            "Maria",
+            "Lopez",
+            "1958-04-12",
+            "Dr. Shah",
+            "2022-01-15",
+            1
+        )
+    )
+
+    conn.commit()
+
+    print("Inserted test patient: P_TEST_001")
+
+def insert_risk_score(conn, patient_id, risk_tier, score_date, model_version="A01-v1"):
+    """
+    Insert one risk score record for a patient.
+    """
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        INSERT INTO risk_scores (
+            patient_id,
+            risk_tier,
+            score_date,
+            model_version
+        )
+        VALUES (?, ?, ?, ?)
+        """,
+        (
+            patient_id,
+            risk_tier,
+            score_date,
+            model_version
+        )
+    )
+
+
+def insert_test_patient_risk_history(conn):
+    """
+    Insert 3 risk score snapshots for the test patient.
+    This creates a risk tier jump from 2 to 4.
+    """
+    patient_id = "P_TEST_001"
+
+    risk_history = [
+        {
+            "days_ago": 90,
+            "risk_tier": 2
+        },
+        {
+            "days_ago": 45,
+            "risk_tier": 3
+        },
+        {
+            "days_ago": 0,
+            "risk_tier": 4
+        }
+    ]
+
+    for record in risk_history:
+        score_date = datetime.now() - timedelta(days=record["days_ago"])
+        score_date_string = score_date.strftime("%Y-%m-%d")
+
+        insert_risk_score(
+            conn=conn,
+            patient_id=patient_id,
+            risk_tier=record["risk_tier"],
+            score_date=score_date_string
+        )
+
+    conn.commit()
+
+    print("Inserted risk history for patient: P_TEST_001")
+
+
 def main():
     conn = connect_db()
 
@@ -50,6 +171,9 @@ def main():
     print(f"Database path: {DB_PATH}")
 
     show_existing_tables(conn)
+    clear_existing_data(conn)
+    insert_test_patient(conn)
+    insert_test_patient_risk_history(conn)
 
     conn.close()
 
