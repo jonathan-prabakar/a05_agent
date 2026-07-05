@@ -234,6 +234,65 @@ def insert_test_patient_care_gaps(conn):
 
     print("Inserted care gaps for patient: P_TEST_001")
 
+def insert_encounter(
+    conn,
+    patient_id,
+    encounter_type,
+    encounter_date,
+    discharge_flag,
+    summary
+):
+    """
+    Insert one encounter record for a patient.
+    """
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        INSERT INTO encounters (
+            patient_id,
+            encounter_type,
+            encounter_date,
+            discharge_flag,
+            summary
+        )
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (
+            patient_id,
+            encounter_type,
+            encounter_date,
+            discharge_flag,
+            summary
+        )
+    )
+
+
+def insert_test_patient_encounters(conn):
+    """
+    Insert recent encounter data for the test patient.
+    Includes one recent discharge.
+    """
+    patient_id = "P_TEST_001"
+
+    encounter_date = datetime.now() - timedelta(days=3)
+    encounter_date_string = encounter_date.strftime("%Y-%m-%d")
+
+    insert_encounter(
+        conn=conn,
+        patient_id=patient_id,
+        encounter_type="Hospital admission",
+        encounter_date=encounter_date_string,
+        discharge_flag=1,
+        summary=(
+            "Synthetic discharge summary: patient discharged after inpatient stay. "
+            "Follow-up appointment and medication reconciliation recommended."
+        )
+    )
+
+    conn.commit()
+
+    print("Inserted encounters for patient: P_TEST_001")
 
 def main():
     conn = connect_db()
@@ -246,6 +305,7 @@ def main():
     insert_test_patient(conn)
     insert_test_patient_risk_history(conn)
     insert_test_patient_care_gaps(conn)
+    insert_test_patient_encounters(conn)
 
     conn.close()
 
