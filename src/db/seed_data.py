@@ -1,8 +1,10 @@
+import random
 import sqlite3
 from pathlib import Path
 
 from seed_helpers import clear_existing_data
 from demo_patients import seed_demo_patients
+from random_patients import seed_random_patients
 
 
 DB_PATH = Path("data/a05_lpr.sqlite")
@@ -45,19 +47,24 @@ def show_existing_tables(conn):
 
 
 def main():
+    random.seed(42)
+
     conn = connect_db()
 
     print("Connected to database successfully.")
     print(f"Database path: {DB_PATH}")
 
     show_existing_tables(conn)
+
     clear_existing_data(conn)
     seed_demo_patients(conn)
+    seed_random_patients(conn, count=95)
 
     conn.commit()
     conn.close()
 
     print("Seed data completed successfully.")
+    print("Total expected patients: 100")
 
 
 if __name__ == "__main__":
