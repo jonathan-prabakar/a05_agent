@@ -294,6 +294,77 @@ def insert_test_patient_encounters(conn):
 
     print("Inserted encounters for patient: P_TEST_001")
 
+def insert_medication_event(
+    conn,
+    patient_id,
+    medication_name,
+    adherence_flag,
+    event_date
+):
+    """
+    Insert one medication adherence event for a patient.
+    """
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        INSERT INTO medication_events (
+            patient_id,
+            medication_name,
+            adherence_flag,
+            event_date
+        )
+        VALUES (?, ?, ?, ?)
+        """,
+        (
+            patient_id,
+            medication_name,
+            adherence_flag,
+            event_date
+        )
+    )
+
+
+def insert_test_patient_medication_events(conn):
+    """
+    Insert medication adherence events for the test patient.
+    Includes two adherence issues.
+    """
+    patient_id = "P_TEST_001"
+
+    medication_events = [
+        {
+            "medication_name": "Metformin",
+            "adherence_flag": "late_refill",
+            "days_ago": 12
+        },
+        {
+            "medication_name": "Lisinopril",
+            "adherence_flag": "non_adherent",
+            "days_ago": 8
+        },
+        {
+            "medication_name": "Atorvastatin",
+            "adherence_flag": "on_track",
+            "days_ago": 20
+        }
+    ]
+
+    for event in medication_events:
+        event_date = datetime.now() - timedelta(days=event["days_ago"])
+        event_date_string = event_date.strftime("%Y-%m-%d")
+
+        insert_medication_event(
+            conn=conn,
+            patient_id=patient_id,
+            medication_name=event["medication_name"],
+            adherence_flag=event["adherence_flag"],
+            event_date=event_date_string
+        )
+
+    conn.commit()
+
+
 def main():
     conn = connect_db()
 
@@ -306,6 +377,7 @@ def main():
     insert_test_patient_risk_history(conn)
     insert_test_patient_care_gaps(conn)
     insert_test_patient_encounters(conn)
+    insert_test_patient_medication_events(conn)
 
     conn.close()
 
