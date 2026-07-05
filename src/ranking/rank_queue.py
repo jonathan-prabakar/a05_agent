@@ -156,6 +156,46 @@ def get_ranked_queue(conn):
     return cursor.fetchall()
 
 
+def build_reason_surfaced(row):
+    """
+    Build a plain-English explanation for why the patient surfaced.
+    This is deterministic and based only on structured fields.
+    """
+    reasons = []
+
+    if row["is_snoozed"] == 1:
+        reasons.append(f"Patient is snoozed until {row['snooze_until']}")
+
+    if row["current_risk_tier"] >= 4:
+        reasons.append(f"Current risk tier is high ({row['current_risk_tier']})")
+
+    if row["risk_tier_delta"] >= 2:
+        reasons.append(
+            f"Risk tier increased by {row['risk_tier_delta']} levels "
+            f"from baseline"
+        )
+
+    if row["days_since_discharge"] <= 7:
+        reasons.append(
+            f"Recent discharge {row['days_since_discharge']:.0f} days ago"
+        )
+    elif row["days_since_discharge"] <= 30:
+        reasons.append(
+            f"Discharge within last 30 days "
+            f"({row['days_since_discharge']:.0f} days ago)"
+        )
+
+    if row["open_gap_count"] > 0:
+        reasons.append(f"{row['open_gap_count']} open care gap(s)")
+
+    if row["adherence_issue_count"] > 0:
+        reasons.append(f"{row['adherence_issue_count']} medication adherence issue(s)")
+
+    if not reasons:
+        reasons.append("Moderate priority based on current structured signals")
+
+    return "; ".join(reasons)
+
 def print_queue(rows):
     urgent = [row for row in rows if row["queue_type"] == "urgent"]
     routine = [row for row in rows if row["queue_type"] == "routine"]
@@ -166,6 +206,8 @@ def print_queue(rows):
     print("==============================")
 
     for index, row in enumerate(urgent[:10], start=1):
+        reason = build_reason_surfaced(row)
+
         print(
             f"{index}. {row['patient_name']} "
             f"| ID: {row['patient_id']} "
@@ -176,6 +218,7 @@ def print_queue(rows):
             f"| Discharge days: {row['days_since_discharge']:.0f} "
             f"| Med issues: {row['adherence_issue_count']}"
         )
+        print(f"   Reason: {reason}")
 
     print("\n==============================")
     print("ROUTINE QUEUE")
@@ -202,7 +245,7 @@ def print_queue(rows):
             f"| Snoozed until: {row['snooze_until']} "
             f"| Score if active: {row['priority_score']:.2f}"
         )
-
+        print(f"   Reason: {reason}")
 
 def main():
     conn = connect_db()
