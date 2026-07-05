@@ -2,6 +2,17 @@ import sqlite3
 from pathlib import Path
 from datetime import datetime, timedelta
 
+from seed_helpers import (
+    clear_existing_data,
+    insert_patient,
+    insert_risk_score,
+    insert_care_gap,
+    insert_encounter,
+    insert_medication_event,
+    insert_care_manager_note,
+)
+
+
 DB_PATH = Path("data/a05_lpr.sqlite")
 
 
@@ -41,160 +52,46 @@ def show_existing_tables(conn):
         print(f"- {table[0]}")
 
 
-def clear_existing_data(conn):
+def seed_test_patient(conn):
     """
-    Clear all existing data from the database.
+    Seed one complete test patient.
 
-    Child tables are cleared before parent tables to avoid
-    foreign key relationship problems.
-    """
-    cursor = conn.cursor()
-
-    tables = [
-        "care_manager_notes",
-        "medication_events",
-        "encounters",
-        "care_gaps",
-        "risk_scores",
-        "patients"
-    ]
-
-    for table in tables:
-        cursor.execute(f"DELETE FROM {table}")
-
-    conn.commit()
-
-    print("Cleared existing data.")
-
-
-def insert_test_patient(conn):
-    """
-    Insert one test patient into the patients table.
-    """
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        INSERT INTO patients (
-            patient_id,
-            first_name,
-            last_name,
-            date_of_birth,
-            pcp_name,
-            enrollment_date,
-            active
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            "P_TEST_001",
-            "Maria",
-            "Lopez",
-            "1958-04-12",
-            "Dr. Shah",
-            "2022-01-15",
-            1
-        )
-    )
-
-    conn.commit()
-
-    print("Inserted test patient: P_TEST_001")
-
-def insert_risk_score(conn, patient_id, risk_tier, score_date, model_version="A01-v1"):
-    """
-    Insert one risk score record for a patient.
-    """
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        INSERT INTO risk_scores (
-            patient_id,
-            risk_tier,
-            score_date,
-            model_version
-        )
-        VALUES (?, ?, ?, ?)
-        """,
-        (
-            patient_id,
-            risk_tier,
-            score_date,
-            model_version
-        )
-    )
-
-
-def insert_test_patient_risk_history(conn):
-    """
-    Insert 3 risk score snapshots for the test patient.
-    This creates a risk tier jump from 2 to 4.
+    This patient intentionally has multiple signals:
+    - risk tier jump
+    - open care gaps
+    - recent discharge
+    - medication adherence issues
+    - AI-drafted note pending review
     """
     patient_id = "P_TEST_001"
 
+    insert_patient(
+        conn=conn,
+        patient_id=patient_id,
+        first_name="Maria",
+        last_name="Lopez",
+        date_of_birth="1958-04-12",
+        pcp_name="Dr. Shah",
+        enrollment_date="2022-01-15",
+        active=1
+    )
+
     risk_history = [
-        {
-            "days_ago": 90,
-            "risk_tier": 2
-        },
-        {
-            "days_ago": 45,
-            "risk_tier": 3
-        },
-        {
-            "days_ago": 0,
-            "risk_tier": 4
-        }
+        {"days_ago": 90, "risk_tier": 2},
+        {"days_ago": 45, "risk_tier": 3},
+        {"days_ago": 0, "risk_tier": 4},
     ]
 
     for record in risk_history:
         score_date = datetime.now() - timedelta(days=record["days_ago"])
-        score_date_string = score_date.strftime("%Y-%m-%d")
 
         insert_risk_score(
             conn=conn,
             patient_id=patient_id,
             risk_tier=record["risk_tier"],
-            score_date=score_date_string
+            score_date=score_date.strftime("%Y-%m-%d"),
+            model_version="A01-v1"
         )
-
-    conn.commit()
-
-    print("Inserted risk history for patient: P_TEST_001")
-
-def insert_care_gap(conn, patient_id, measure_name, status, due_date, priority):
-    """
-    Insert one care gap for a patient.
-    """
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        INSERT INTO care_gaps (
-            patient_id,
-            measure_name,
-            status,
-            due_date,
-            priority
-        )
-        VALUES (?, ?, ?, ?, ?)
-        """,
-        (
-            patient_id,
-            measure_name,
-            status,
-            due_date,
-            priority
-        )
-    )
-
-
-def insert_test_patient_care_gaps(conn):
-    """
-    Insert multiple care gaps for the test patient.
-    """
-    patient_id = "P_TEST_001"
 
     care_gaps = [
         {
@@ -219,118 +116,29 @@ def insert_test_patient_care_gaps(conn):
 
     for gap in care_gaps:
         due_date = datetime.now() + timedelta(days=gap["days_until_due"])
-        due_date_string = due_date.strftime("%Y-%m-%d")
 
         insert_care_gap(
             conn=conn,
             patient_id=patient_id,
             measure_name=gap["measure_name"],
             status=gap["status"],
-            due_date=due_date_string,
+            due_date=due_date.strftime("%Y-%m-%d"),
             priority=gap["priority"]
         )
 
-    conn.commit()
-
-    print("Inserted care gaps for patient: P_TEST_001")
-
-def insert_encounter(
-    conn,
-    patient_id,
-    encounter_type,
-    encounter_date,
-    discharge_flag,
-    summary
-):
-    """
-    Insert one encounter record for a patient.
-    """
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        INSERT INTO encounters (
-            patient_id,
-            encounter_type,
-            encounter_date,
-            discharge_flag,
-            summary
-        )
-        VALUES (?, ?, ?, ?, ?)
-        """,
-        (
-            patient_id,
-            encounter_type,
-            encounter_date,
-            discharge_flag,
-            summary
-        )
-    )
-
-
-def insert_test_patient_encounters(conn):
-    """
-    Insert recent encounter data for the test patient.
-    Includes one recent discharge.
-    """
-    patient_id = "P_TEST_001"
-
     encounter_date = datetime.now() - timedelta(days=3)
-    encounter_date_string = encounter_date.strftime("%Y-%m-%d")
 
     insert_encounter(
         conn=conn,
         patient_id=patient_id,
         encounter_type="Hospital admission",
-        encounter_date=encounter_date_string,
+        encounter_date=encounter_date.strftime("%Y-%m-%d"),
         discharge_flag=1,
         summary=(
             "Synthetic discharge summary: patient discharged after inpatient stay. "
             "Follow-up appointment and medication reconciliation recommended."
         )
     )
-
-    conn.commit()
-
-    print("Inserted encounters for patient: P_TEST_001")
-
-def insert_medication_event(
-    conn,
-    patient_id,
-    medication_name,
-    adherence_flag,
-    event_date
-):
-    """
-    Insert one medication adherence event for a patient.
-    """
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        INSERT INTO medication_events (
-            patient_id,
-            medication_name,
-            adherence_flag,
-            event_date
-        )
-        VALUES (?, ?, ?, ?)
-        """,
-        (
-            patient_id,
-            medication_name,
-            adherence_flag,
-            event_date
-        )
-    )
-
-
-def insert_test_patient_medication_events(conn):
-    """
-    Insert medication adherence events for the test patient.
-    Includes two adherence issues.
-    """
-    patient_id = "P_TEST_001"
 
     medication_events = [
         {
@@ -352,17 +160,30 @@ def insert_test_patient_medication_events(conn):
 
     for event in medication_events:
         event_date = datetime.now() - timedelta(days=event["days_ago"])
-        event_date_string = event_date.strftime("%Y-%m-%d")
 
         insert_medication_event(
             conn=conn,
             patient_id=patient_id,
             medication_name=event["medication_name"],
             adherence_flag=event["adherence_flag"],
-            event_date=event_date_string
+            event_date=event_date.strftime("%Y-%m-%d")
         )
 
-    conn.commit()
+    insert_care_manager_note(
+        conn=conn,
+        patient_id=patient_id,
+        note_type="ai_drafted_brief",
+        note_text=(
+            "AI-drafted care manager brief. Patient has rising risk tier, "
+            "recent discharge, open care gaps, and medication adherence issues. "
+            "This note is unsigned and pending human review."
+        ),
+        status="pending_review",
+        created_at=datetime.now().strftime("%Y-%m-%d"),
+        snooze_until=None
+    )
+
+    print("Seeded test patient: P_TEST_001")
 
 
 def main():
@@ -373,13 +194,12 @@ def main():
 
     show_existing_tables(conn)
     clear_existing_data(conn)
-    insert_test_patient(conn)
-    insert_test_patient_risk_history(conn)
-    insert_test_patient_care_gaps(conn)
-    insert_test_patient_encounters(conn)
-    insert_test_patient_medication_events(conn)
+    seed_test_patient(conn)
 
+    conn.commit()
     conn.close()
+
+    print("Seed data completed successfully.")
 
 
 if __name__ == "__main__":
