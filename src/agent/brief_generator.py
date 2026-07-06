@@ -1,5 +1,7 @@
 import sys
 from pathlib import Path
+import json
+from datetime import datetime
 
 # Allow imports from src folders when running as a script
 CURRENT_FILE = Path(__file__).resolve()
@@ -153,6 +155,44 @@ def generate_patient_brief(context):
         )
     }
 
+def save_brief_to_notes(conn, brief):
+    """
+    Save the generated patient brief as an unsigned AI-drafted care manager note.
+
+    This does not finalize, sign, or clinically file the note.
+    It only creates a pending human-review draft.
+    """
+    cursor = conn.cursor()
+
+    note_text = json.dumps(brief, indent=2)
+
+    cursor.execute(
+        """
+        INSERT INTO care_manager_notes (
+            patient_id,
+            note_type,
+            note_text,
+            status,
+            created_at,
+            snooze_until
+        )
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            brief["patient_id"],
+            "ai_drafted_brief",
+            note_text,
+            "pending_review",
+            datetime.now().strftime("%Y-%m-%d"),
+            None
+        )
+    )
+
+    conn.commit()
+
+    print(f"Saved AI-drafted brief for patient: {brief['patient_id']}")
+
+
 
 def print_patient_brief(brief):
     print("\n==============================")
@@ -194,8 +234,11 @@ def main():
     conn = connect_db()
 
     patient_id = "P_DEMO_001"
+
     context = assemble_patient_context(conn, patient_id)
     brief = generate_patient_brief(context)
+
+    save_brief_to_notes(conn, brief)
 
     conn.close()
 
