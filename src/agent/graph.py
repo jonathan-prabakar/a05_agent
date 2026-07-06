@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional, TypedDict
 
 from langgraph.graph import StateGraph, START, END
 
+
 CURRENT_FILE = Path(__file__).resolve()
 SRC_ROOT = CURRENT_FILE.parents[1]
 
@@ -30,6 +31,17 @@ class A05AgentState(TypedDict, total=False):
     escalation_reasons: List[str]
     status: str
     error: Optional[str]
+    trace: List[str]
+
+
+def append_trace(state: A05AgentState, event: str) -> List[str]:
+    """
+    Append a trace event to the graph state.
+
+    This makes the agent workflow explainable in the terminal/demo.
+    """
+    existing_trace = state.get("trace", [])
+    return existing_trace + [event]
 
 
 def fetch_queue_node(state: A05AgentState) -> A05AgentState:
@@ -43,7 +55,8 @@ def fetch_queue_node(state: A05AgentState) -> A05AgentState:
 
     return {
         "queue_data": queue_data,
-        "status": "queue_fetched"
+        "status": "queue_fetched",
+        "trace": append_trace(state, "fetch_queue: ranked queue retrieved"),
     }
 
 
@@ -59,7 +72,11 @@ def select_top_urgent_node(state: A05AgentState) -> A05AgentState:
         return {
             "selected_patient": None,
             "patient_id": None,
-            "status": "no_urgent_patients"
+            "status": "no_urgent_patients",
+            "trace": append_trace(
+                state,
+                "select_top_urgent: no urgent patients found",
+            ),
         }
 
     selected_patient = urgent_queue[0]
@@ -67,7 +84,12 @@ def select_top_urgent_node(state: A05AgentState) -> A05AgentState:
     return {
         "selected_patient": selected_patient,
         "patient_id": selected_patient["patient_id"],
-        "status": "patient_selected"
+        "status": "patient_selected",
+        "trace": append_trace(
+            state,
+            f"select_top_urgent: selected {selected_patient['patient_name']} "
+            f"({selected_patient['patient_id']})",
+        ),
     }
 
 
@@ -84,7 +106,11 @@ def assemble_context_node(state: A05AgentState) -> A05AgentState:
 
     return {
         "patient_context": patient_context,
-        "status": "context_assembled"
+        "status": "context_assembled",
+        "trace": append_trace(
+            state,
+            f"assemble_context: bounded context assembled for {patient_id}",
+        )
     }
 
 
@@ -102,7 +128,11 @@ def draft_brief_node(state: A05AgentState) -> A05AgentState:
         "brief": brief,
         "escalation_required": escalation["escalate"],
         "escalation_reasons": escalation["reasons"],
-        "status": "brief_drafted"
+        "status": "brief_drafted",
+        "trace": append_trace(
+            state,
+            f"draft_brief: unsigned brief generated; escalation={escalation['escalate']}",
+        ),
     }
 
 
@@ -110,6 +140,10 @@ def save_draft_node(state: A05AgentState) -> A05AgentState:
     """
     Node 5:
     Save unsigned AI-drafted brief into care_manager_notes.
+
+    Important:
+    This does not finalize or sign documentation.
+    It only writes a pending human-review draft.
     """
     brief = state["brief"]
 
@@ -119,7 +153,11 @@ def save_draft_node(state: A05AgentState) -> A05AgentState:
 
     return {
         "draft_saved": True,
-        "status": "draft_saved_pending_human_review"
+        "status": "draft_saved_pending_human_review",
+        "trace": append_trace(
+            state,
+            "save_draft: unsigned draft saved to care_manager_notes",
+        ),
     }
 
 
@@ -155,8 +193,8 @@ def build_a05_graph():
         route_after_selection,
         {
             "assemble_context": "assemble_context",
-            "end": END
-        }
+            "end": END,
+        },
     )
 
     graph.add_edge("assemble_context", "draft_brief")
@@ -179,26 +217,41 @@ def run_graph():
     print("==============================")
     print(f"Status: {final_state.get('status')}")
 
+    print("\nGraph Trace")
+    print("------------------------------")
+    for index, event in enumerate(final_state.get("trace", []), start=1):
+        print(f"{index}. {event}")
+
     selected_patient = final_state.get("selected_patient")
 
     if selected_patient:
+        print("\nSelected Patient")
+        print("------------------------------")
         print(
-            f"Selected patient: "
             f"{selected_patient['patient_name']} "
             f"({selected_patient['patient_id']})"
         )
+        print(f"Priority score: {selected_patient['priority_score']}")
         print(f"Reason surfaced: {selected_patient['reason_surfaced']}")
+
+        print("\nDraft Status")
+        print("------------------------------")
         print(f"Draft saved: {final_state.get('draft_saved')}")
         print(f"Escalation required: {final_state.get('escalation_required')}")
 
         escalation_reasons = final_state.get("escalation_reasons", [])
 
         if escalation_reasons:
-            print("Escalation reasons:")
+            print("\nEscalation Reasons")
+            print("------------------------------")
             for reason in escalation_reasons:
                 print(f"- {reason}")
+        else:
+            print("\nEscalation Reasons")
+            print("------------------------------")
+            print("- No escalation rule fired.")
     else:
-        print("No urgent patients found.")
+        print("\nNo urgent patients found.")
 
 
 if __name__ == "__main__":
